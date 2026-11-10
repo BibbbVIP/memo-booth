@@ -1,0 +1,22 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-spider-dark text-spider-white h-screen overflow-hidden flex flex-col font-['Plus_Jakarta_Sans',sans-serif] antialiased selection:bg-spider-red selection:text-white;
+  }
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #141316;
+}
+::-webkit-scrollbar-thumb {
+  background: #2c2c32;
+  border-radius: 3px;
+}
