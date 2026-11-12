@@ -4,7 +4,11 @@
 
 @layer base {
   body {
-    @apply bg-spider-dark text-spider-white h-screen overflow-hidden flex flex-col font-['Plus_Jakarta_Sans',sans-serif] antialiased selection:bg-spider-red selection:text-white;
+    @apply bg-spider-dark text-spider-white min-h-screen font-['Plus_Jakarta_Sans',sans-serif] antialiased selection:bg-spider-red selection:text-white;
+  }
+
+  #root {
+    @apply flex min-h-screen flex-col;
   }
 }
 

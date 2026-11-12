@@ -1,102 +1,47 @@
 import { useState } from 'react';
+import { ViewState, FrameConfig } from './types';
+import { FRAMES } from './utils/frameConfigs';
 import { Header } from './components/Header';
-import { CameraView } from './components/CameraView';
-import { ControlsPanel } from './components/ControlsPanel';
-import { PreviewModal } from './components/PreviewModal';
-import { useCamera } from './hooks/useCamera';
-import { useCountdown } from './hooks/useCountdown';
-import { GridCount, TimerSeconds } from './types';
+import ChooseFrame from './components/ChooseFrame';
+import CameraPage from './components/CameraPage';
 
 export default function App() {
-  const {
-    videoRef, isLoading, error, devices, selectedDeviceId,
-    setSelectedDeviceId, isMirrored, startCamera, captureFrame
-  } = useCamera();
-
-  const { countdown, startTimer } = useCountdown();
-
-  const [gridCount, setGridCount] = useState<GridCount>(2);
-  const [timer, setTimer] = useState<TimerSeconds>(3);
-  const [isCapturing, setIsCapturing] = useState<boolean>(false);
-  const [currentPhotoIndex, setCurrentPhotoIndex] = useState<number | null>(null);
-  const [capturedPhotos, setCapturedPhotos] = useState<string[]>([]);
-  const [showPreview, setShowPreview] = useState<boolean>(false);
-
-  const handleStartCaptureSequence = () => {
-    if (isCapturing || isLoading || error) return;
-    setIsCapturing(true);
-    setCapturedPhotos([]);
-
-    const photos: string[] = [];
-    let shotCount = 0;
-
-    const takeNextShot = () => {
-      setCurrentPhotoIndex(shotCount);
-      startTimer(timer, () => {
-        const frameData = captureFrame();
-        if (frameData) photos.push(frameData);
-        shotCount++;
-
-        if (shotCount < gridCount) {
-          setTimeout(takeNextShot, 600);
-        } else {
-          setCapturedPhotos(photos);
-          setIsCapturing(false);
-          setCurrentPhotoIndex(null);
-          setShowPreview(true);
-        }
-      });
-    };
-
-    takeNextShot();
-  };
-
-  const handleRetake = () => {
-    setShowPreview(false);
-    setCapturedPhotos([]);
-  };
+  const [currentView, setCurrentView] = useState<ViewState>('home');
+  const [selectedFrame, setSelectedFrame] = useState<FrameConfig | null>(null);
 
   return (
-    <div className="h-screen w-screen bg-spider-dark text-slate-100 flex flex-col overflow-hidden">
+    <>
       <Header />
 
-      <main className="flex-1 max-w-lg w-full mx-auto p-3 flex flex-col justify-center items-center gap-3 overflow-hidden">
-        <CameraView
-          videoRef={videoRef}
-          isLoading={isLoading}
-          error={error}
-          isMirrored={isMirrored}
-          countdown={countdown}
-          currentPhotoIndex={currentPhotoIndex}
-          totalPhotos={gridCount}
-          onRetry={startCamera}
-        />
+      {currentView === 'home' && (
+        <main className="flex-1 flex flex-col items-center justify-center p-4 text-center">
+          <h1 className="text-4xl font-extrabold text-spider-white mb-4 tracking-tight">Memo Booth</h1>
+          <p className="text-slate-400 mb-8 max-w-md">
+            Capture the moment, cherish the magic. Turn a few poses into a photo strip that feels like you.
+          </p>
+          <button
+            onClick={() => setCurrentView('choose-frame')}
+            className="bg-spider-red hover:bg-red-600 text-white px-8 py-3 rounded-full font-semibold transition-transform active:scale-95 shadow-lg"
+          >
+            Start Photobooth →
+          </button>
+        </main>
+      )}
 
-        <ControlsPanel
-          gridCount={gridCount}
-          setGridCount={setGridCount}
-          timer={timer}
-          setTimer={setTimer}
-          devices={devices}
-          selectedDeviceId={selectedDeviceId}
-          setSelectedDeviceId={setSelectedDeviceId}
-          isCapturing={isCapturing}
-          disabled={isLoading || !!error}
-          onStartCapture={handleStartCaptureSequence}
-        />
-      </main>
-
-      <footer className="py-2 text-center text-[10px] text-slate-500 border-t border-spider-grey/20">
-        Memo Booth by AL • Clean, Fast & Local Photobooth
-      </footer>
-
-      {showPreview && (
-        <PreviewModal
-          photosDataUrl={capturedPhotos}
-          onClose={() => setShowPreview(false)}
-          onRetake={handleRetake}
+      {currentView === 'choose-frame' && (
+        <ChooseFrame
+          frames={FRAMES}
+          onSelect={frame => {
+            setSelectedFrame(frame);
+            setCurrentView('camera');
+          }}
+          onBack={() => setCurrentView('home')}
         />
       )}
-    </div>
+
+      {currentView === 'camera' && selectedFrame && (
+        <CameraPage frame={selectedFrame} onBack={() => setCurrentView('choose-frame')} />
+      )}
+    </>
   );
 }

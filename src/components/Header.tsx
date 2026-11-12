@@ -1,5 +1,4 @@
 import React from 'react';
-import { ShieldCheck } from 'lucide-react';
 
 export const Header: React.FC = () => {
   return (
@@ -10,20 +9,13 @@ export const Header: React.FC = () => {
             <h1 className="font-extrabold text-lg sm:text-xl tracking-tight text-spider-white">
               MEMO BOOTH
             </h1>
-            <span className="text-xs font-semibold text-spider-red tracking-wider uppercase">
-              by AL
-            </span>
           </div>
           <p className="text-[11px] text-slate-400">
             Capture the Real You!
           </p>
         </div>
-
-        <div className="flex items-center gap-1.5 bg-spider-grey/50 border border-spider-grey px-3 py-1.5 rounded-full text-xs text-slate-300">
-          <ShieldCheck className="w-3.5 h-3.5 text-spider-red" />
-          <span className="hidden sm:inline">100% Private • Local Processing</span>
-          <span className="sm:hidden">Local</span>
-        </div>
+        
+        {/* Indikator "100% Private" sudah dihapus untuk tampilan yang lebih bersih */}
       </div>
     </header>
   );

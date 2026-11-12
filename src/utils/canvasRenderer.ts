@@ -1,194 +1,200 @@
-import { FrameOption } from '../types';
+import { FrameConfig, FrameStyle, PlacedSticker, SlotRect } from '../types';
 
-export const FRAME_OPTIONS: FrameOption[] = [
-  {
-    id: 'no-frame',
-    name: 'No frame',
-    description: 'Clean borderless photo strip',
-    bgColor: '#141316',
-    textColor: '#ffffff',
-    accentColor: '#ef4444',
-    borderColor: 'transparent',
-    isCustom: false,
-    isRaw: true
-  },
-  {
-    id: 'classic-white',
-    name: 'Classic',
-    description: 'Classic white frame with branding',
-    bgColor: '#ffffff',
-    textColor: '#141316',
-    accentColor: '#3371bb',
-    borderColor: '#e2e8f0',
-    isCustom: false,
-    isRaw: false
-  },
-  {
-    id: 'custom-mentoring',
-    name: 'Custom 1',
-    description: 'Custom 1 template overlay',
-    bgColor: 'transparent',
-    textColor: '#ffffff',
-    accentColor: '#ffffff',
-    borderColor: 'transparent',
-    isCustom: true,
-    customOverlayUrl: '/mentoring.png'
-  },
-  {
-    id: 'custom-pres',
-    name: 'Custom 2',
-    description: 'Custom 2 template overlay',
-    bgColor: 'transparent',
-    textColor: '#ffffff',
-    accentColor: '#ffffff',
-    borderColor: 'transparent',
-    isCustom: true,
-    customOverlayUrl: '/32Esync.png'
-  },
-  {
-    id: 'upload-custom',
-    name: '+ Upload Frame',
-    description: 'Upload your own custom frame PNG',
-    bgColor: 'transparent',
-    textColor: '#ffffff',
-    accentColor: '#ffffff',
-    borderColor: 'transparent',
-    isCustom: true,
-    isUploadOption: true
-  }
-];
+/** Final export is drawn at 2x the logical size (e.g. 1200 x 3600 for 4 slots). */
+export const EXPORT_SCALE = 2;
 
-function drawImageCover(
-  ctx: CanvasRenderingContext2D,
-  img: HTMLImageElement,
-  x: number,
-  y: number,
-  w: number,
-  h: number
-) {
-  const imgRatio = img.width / img.height;
-  const targetRatio = w / h;
-  let renderW = w;
-  let renderH = h;
-  let offsetX = 0;
-  let offsetY = 0;
-
-  if (imgRatio > targetRatio) {
-    renderW = h * imgRatio;
-    offsetX = (w - renderW) / 2;
-  } else {
-    renderH = w / imgRatio;
-    offsetY = (h - renderH) / 2;
-  }
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.rect(x, y, w, h);
-  ctx.clip();
-  ctx.drawImage(img, x + offsetX, y + offsetY, renderW, renderH);
-  ctx.restore();
+interface RenderOptions {
+  scale?: number; // defaults to EXPORT_SCALE
+  placeholder?: boolean; // grey empty slots, used for frame thumbnails
+  stickers?: PlacedSticker[]; // drawn on top of everything, including the frame overlay
 }
 
-export async function renderPhotoStrip(
-  photosDataUrl: string[],
-  frameId: string = 'classic-white',
-  uploadedCustomOverlayUrl: string | null = null
-): Promise<string> {
-  const selectedFrame = FRAME_OPTIONS.find(f => f.id === frameId) || FRAME_OPTIONS[1];
-  
-  // 1. Load raw photos
-  const loadedImages: HTMLImageElement[] = (await Promise.all(
-    photosDataUrl.map(
-      src =>
-        new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => resolve(img);
-          img.onerror = (err) => reject(err);
-          img.src = src;
-        })
-    )
-  )) as HTMLImageElement[];
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = () => reject(new Error(`Failed to load image: ${src.slice(0, 60)}`));
+    img.src = src;
+  });
+}
 
-  // 2. Tentukan URL overlay (bisa dari bawaan atau dari file yang di-upload user)
-  const activeOverlayUrl = selectedFrame.isUploadOption 
-    ? uploadedCustomOverlayUrl 
-    : selectedFrame.customOverlayUrl;
+function roundedRectPath(ctx: CanvasRenderingContext2D, r: SlotRect, radius: number) {
+  const rad = Math.min(radius, r.w / 2, r.h / 2);
+  ctx.beginPath();
+  ctx.moveTo(r.x + rad, r.y);
+  ctx.arcTo(r.x + r.w, r.y, r.x + r.w, r.y + r.h, rad);
+  ctx.arcTo(r.x + r.w, r.y + r.h, r.x, r.y + r.h, rad);
+  ctx.arcTo(r.x, r.y + r.h, r.x, r.y, rad);
+  ctx.arcTo(r.x, r.y, r.x + r.w, r.y, rad);
+  ctx.closePath();
+}
 
-  let customOverlayImg: HTMLImageElement | null = null;
-  if (selectedFrame.isCustom && activeOverlayUrl) {
-    try {
-      customOverlayImg = await new Promise<HTMLImageElement>((resolve, reject) => {
-        const oImg = new Image();
-        oImg.onload = () => resolve(oImg);
-        oImg.onerror = (err) => reject(err);
-        oImg.src = activeOverlayUrl;
-      });
-    } catch (e) {
-      console.error('Custom Frame Load Error:', e);
-    }
+/** "object-fit: cover": crop the source so it fills the slot without stretching. */
+function drawCover(ctx: CanvasRenderingContext2D, img: HTMLImageElement, r: SlotRect) {
+  const imgRatio = img.width / img.height;
+  const slotRatio = r.w / r.h;
+  let sx = 0;
+  let sy = 0;
+  let sw = img.width;
+  let sh = img.height;
+
+  if (imgRatio > slotRatio) {
+    sw = img.height * slotRatio;
+    sx = (img.width - sw) / 2;
+  } else {
+    sh = img.width / slotRatio;
+    sy = (img.height - sh) / 2;
   }
 
-  const photoCount = loadedImages.length;
-  const photoW = 1000;
-  const photoH = 750;
-  
-  const isCustom = selectedFrame.isCustom;
-  const isRaw = selectedFrame.isRaw;
+  ctx.drawImage(img, sx, sy, sw, sh, r.x, r.y, r.w, r.h);
+}
 
-  const paddingX = (isRaw || isCustom) ? 0 : 50;
-  const paddingTop = (isRaw || isCustom) ? 0 : 50;
-  const gapY = (isRaw || isCustom) ? 0 : 40;
-  const footerH = (isRaw || isCustom) ? 0 : 180;
+function drawBackground(ctx: CanvasRenderingContext2D, frame: FrameConfig) {
+  const bg = frame.style?.background;
+  if (Array.isArray(bg)) {
+    const gradient = ctx.createLinearGradient(0, 0, 0, frame.height);
+    gradient.addColorStop(0, bg[0]);
+    gradient.addColorStop(1, bg[1]);
+    ctx.fillStyle = gradient;
+  } else {
+    ctx.fillStyle = bg ?? '#ffffff';
+  }
+  ctx.fillRect(0, 0, frame.width, frame.height);
+}
 
-  const canvasW = photoW + paddingX * 2;
-  const canvasH = paddingTop + photoCount * photoH + (photoCount - 1) * gapY + footerH;
+function drawSlot(
+  ctx: CanvasRenderingContext2D,
+  rect: SlotRect,
+  img: HTMLImageElement | null,
+  style: FrameStyle | undefined,
+  placeholder: boolean
+) {
+  const radius = style?.slotRadius ?? 0;
+
+  ctx.save();
+  roundedRectPath(ctx, rect, radius);
+  ctx.clip();
+  if (img) {
+    drawCover(ctx, img, rect);
+  } else if (placeholder) {
+    ctx.fillStyle = '#e5e7eb';
+    ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  }
+  ctx.restore();
+
+  if (style && style.slotBorderWidth > 0) {
+    roundedRectPath(ctx, rect, radius);
+    ctx.lineWidth = style.slotBorderWidth;
+    ctx.strokeStyle = style.slotBorderColor;
+    ctx.stroke();
+  }
+}
+
+function drawFooter(ctx: CanvasRenderingContext2D, frame: FrameConfig, style: FrameStyle) {
+  const lastSlot = frame.slotRects[frame.slotRects.length - 1];
+  const footerTop = lastSlot.y + lastSlot.h;
+  const centerY = footerTop + (frame.height - footerTop) / 2;
+  const centerX = frame.width / 2;
+
+  // Scale up the fonts for 1200px wide frames (Postcard)
+  const isLargeFrame = frame.width >= 1000;
+  const titleFontSize = isLargeFrame ? 54 : 36;
+  const dateFontSize = isLargeFrame ? 30 : 20;
+  const lineOffset = isLargeFrame ? 45 : 22;
+  const lineLength = isLargeFrame ? 100 : 60;
+  const lineWidth = isLargeFrame ? 6 : 4;
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+
+  // Accent Line
+  ctx.fillStyle = style.accentColor;
+  ctx.fillRect(centerX - lineLength / 2, footerTop + lineOffset, lineLength, lineWidth);
+
+  // Title: Memo Booth
+  ctx.fillStyle = style.textColor;
+  ctx.font = `800 ${titleFontSize}px "Plus Jakarta Sans", sans-serif`;
+  ctx.fillText(style.title, centerX, centerY - (isLargeFrame ? 15 : 10));
+
+  // Date only (Removed "by AL")
+  const date = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+  ctx.font = `500 ${dateFontSize}px "Plus Jakarta Sans", sans-serif`;
+  ctx.fillText(date, centerX, centerY + (isLargeFrame ? 40 : 28));
+}
+
+async function drawStickers(ctx: CanvasRenderingContext2D, frame: FrameConfig, stickers: PlacedSticker[]) {
+  const images = await Promise.all(
+    stickers.map(s =>
+      loadImage(s.src).catch(err => {
+        console.warn('Sticker could not be loaded:', err);
+        return null;
+      })
+    )
+  );
+
+  stickers.forEach((s, i) => {
+    const img = images[i];
+    if (!img) return;
+    const w = s.size * frame.width;
+    const h = w / s.aspect;
+
+    ctx.save();
+    ctx.translate(s.x * frame.width, s.y * frame.height);
+    ctx.rotate((s.rotation * Math.PI) / 180);
+    ctx.drawImage(img, -w / 2, -h / 2, w, h);
+    ctx.restore();
+  });
+}
+
+async function ensureFontLoaded() {
+  try {
+    await document.fonts.load('800 54px "Plus Jakarta Sans"');
+    await document.fonts.load('800 36px "Plus Jakarta Sans"');
+    await document.fonts.load('500 30px "Plus Jakarta Sans"');
+    await document.fonts.load('500 20px "Plus Jakarta Sans"');
+  } catch {
+    // fall back to the system font
+  }
+}
+
+/**
+ * Draws the photo strip: background, photos in their slots, footer text,
+ * then the transparent PNG overlay (if the frame has one) on top.
+ * Returns a PNG data URL.
+ */
+export async function renderPhotoStrip(
+  photos: string[],
+  frame: FrameConfig,
+  options: RenderOptions = {}
+): Promise<string> {
+  const { scale = EXPORT_SCALE, placeholder = false, stickers = [] } = options;
 
   const canvas = document.createElement('canvas');
-  canvas.width = canvasW;
-  canvas.height = canvasH;
+  canvas.width = Math.round(frame.width * scale);
+  canvas.height = Math.round(frame.height * scale);
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('Could not initialize canvas context');
+  if (!ctx) throw new Error('Could not initialize the 2D canvas.');
 
-  ctx.clearRect(0, 0, canvasW, canvasH);
-  ctx.fillStyle = selectedFrame.bgColor;
-  ctx.fillRect(0, 0, canvasW, canvasH);
+  ctx.scale(scale, scale);
+  ctx.imageSmoothingEnabled = true;
+  ctx.imageSmoothingQuality = 'high';
 
-  // 3. Render Photos & Frames per slot
-  loadedImages.forEach((img, idx) => {
-    const yPos = paddingTop + idx * (photoH + gapY);
-    
-    drawImageCover(ctx, img, paddingX, yPos, photoW, photoH);
+  const [photoImages, overlayImage] = await Promise.all([
+    Promise.all(frame.slotRects.map((_, i) => (photos[i] ? loadImage(photos[i]) : Promise.resolve(null)))),
+    frame.overlay
+      ? loadImage(frame.overlay).catch((err) => {
+          console.warn('Frame overlay could not be loaded:', err);
+          return null;
+        })
+      : Promise.resolve(null),
+    frame.style ? ensureFontLoaded() : Promise.resolve(),
+  ]);
 
-    if (customOverlayImg) {
-      ctx.drawImage(customOverlayImg, paddingX, yPos, photoW, photoH);
-    } else if (!isRaw) {
-      ctx.strokeStyle = '#cbd5e1';
-      ctx.lineWidth = 4;
-      ctx.strokeRect(paddingX, yPos, photoW, photoH);
-    }
-  });
+  drawBackground(ctx, frame);
+  frame.slotRects.forEach((rect, i) => drawSlot(ctx, rect, photoImages[i], frame.style, placeholder));
+  if (frame.style) drawFooter(ctx, frame, frame.style);
+  if (overlayImage) ctx.drawImage(overlayImage, 0, 0, frame.width, frame.height);
+  if (stickers.length) await drawStickers(ctx, frame, stickers);
 
-  // 4. Render Footer (Hanya untuk Classic)
-  if (!isRaw && !isCustom) {
-    const footerCenterY = canvasH - footerH / 2;
-
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-
-    ctx.fillStyle = selectedFrame.textColor;
-    ctx.font = '800 40px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText('Memo Booth', canvasW / 2, footerCenterY - 25);
-
-    const dateStr = new Date().toLocaleDateString('en-US', {
-      month: 'long',
-      day: 'numeric',
-      year: 'numeric'
-    });
-
-    ctx.fillStyle = '#64748b';
-    ctx.font = '500 22px "Plus Jakarta Sans", sans-serif';
-    ctx.fillText(dateStr, canvasW / 2, footerCenterY + 25);
-  }
-
-  return canvas.toDataURL('image/png', 0.95);
+  return canvas.toDataURL('image/png');
 }

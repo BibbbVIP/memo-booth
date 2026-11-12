@@ -6,6 +6,7 @@ interface CameraViewProps {
   isLoading: boolean;
   error: string | null;
   isMirrored: boolean;
+  filterCss?: string;
   countdown: number | null;
   currentPhotoIndex: number | null;
   totalPhotos: number;
@@ -17,6 +18,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
   isLoading,
   error,
   isMirrored,
+  filterCss = 'none',
   countdown,
   currentPhotoIndex,
   totalPhotos,
@@ -30,6 +32,7 @@ export const CameraView: React.FC<CameraViewProps> = ({
         autoPlay
         playsInline
         muted
+        style={{ filter: filterCss }}
         className={`w-full h-full object-cover ${isMirrored ? 'scale-x-[-1]' : ''}`}
       />
 
